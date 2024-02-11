@@ -1,0 +1,10 @@
+[workspace]
+members = ["parsec-rs", "tx-rs"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Katsutoshi Itoh"]
+description = "DDD pilot project"
+documentation = "https://github.com/cutsea110/d3/README.md"
+edition = "2021"
