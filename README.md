@@ -1,6 +1,6 @@
-# DDD pilot project
+# fragments library framework
 
-[![Rust](https://github.com/cutsea110/d3/actions/workflows/rust.yml/badge.svg)](https://github.com/cutsea110/d3/actions/workflows/rust.yml)
+[![Rust](https://github.com/cutsea110/fragments/actions/workflows/rust.yml/badge.svg)](https://github.com/cutsea110/fragments/actions/workflows/rust.yml)
 
 ## Libraries
 
