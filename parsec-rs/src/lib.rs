@@ -992,6 +992,7 @@ mod test_string {
     fn test_string() {
         assert_eq!(string("abc").parse("abcdef"), Ok(("abc", "def")));
         assert_eq!(string("abc").parse("abdef"), Err(ParseError::Rest("abdef")));
+        assert_eq!(string("あいう").parse("あいうえお"), Ok(("あいう", "えお")));
     }
 }
 
@@ -1021,6 +1022,7 @@ mod test_constant {
     fn test_constant() {
         assert_eq!(constant(123).parse("abc"), Ok((123, "abc")));
         assert_eq!(constant("abc").parse("def"), Ok(("abc", "def")));
+        assert_eq!(constant("あい").parse("うえお"), Ok(("あい", "うえお")));
         assert_eq!(constant(true).parse("abc"), Ok((true, "abc")));
     }
 }
