@@ -236,6 +236,10 @@ mod test_join {
             int32().join(char('a')).parse("abc"),
             Err(ParseError::Rest("abc"))
         );
+        assert_eq!(
+            int32().join(char('a')).parse("123xyz"),
+            Err(ParseError::Rest("xyz"))
+        );
     }
 }
 
@@ -361,6 +365,12 @@ mod test_and_then {
                 .and_then(|x| char('a').map(move |y| (x, y)))
                 .parse("123abc"),
             Ok(((123, 'a'), "bc"))
+        );
+        assert_eq!(
+            int32()
+                .and_then(|x| char('a').map(move |y| (x, y)))
+                .parse("123xyz"),
+            Err(ParseError::Rest("xyz"))
         );
         assert_eq!(
             int32()
