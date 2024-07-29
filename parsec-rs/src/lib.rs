@@ -662,6 +662,7 @@ mod test_pred {
     fn test_pred() {
         assert_eq!(pred(|c| c == 'a').parse("abc"), Ok(('a', "bc")));
         assert_eq!(pred(|c| c == '1').parse("123"), Ok(('1', "23")));
+        assert_eq!(pred(|c| c == 'あ').parse("あいう"), Ok(('あ', "いう")));
         assert_eq!(
             pred(|c| c == 'a').parse("123"),
             Err(ParseError::Rest("123"))
@@ -1009,15 +1010,15 @@ fn _string() -> impl FnOnce(&str) -> ParseResult<String> {
     move |input| {
         if input.starts_with('"') {
             let mut chars = input.chars();
+            let mut len = 0;
             chars.next();
-            let mut s = String::new();
             loop {
                 match chars.next() {
                     Some('"') => {
-                        let j = s.len() + 1; // +1 for the closing '"'
-                        return Ok((s, &input[j + 1..])); // +1 for start of the rest
+                        len += 1; // +1 means the closing '"'
+                        return Ok((input[1..len].to_string(), &input[len + 1..]));
                     }
-                    Some(c) => s.push(c),
+                    Some(c) => len += c.len_utf8(),
                     None => return Err(ParseError::Rest(input)),
                 }
             }
