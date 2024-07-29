@@ -1002,6 +1002,64 @@ mod test_keyword {
     }
 }
 
+pub fn string() -> impl Parser<Item = String> {
+    Str
+}
+fn _string() -> impl FnOnce(&str) -> ParseResult<String> {
+    move |input| {
+        if input.starts_with('"') {
+            let mut chars = input.chars();
+            chars.next();
+            let mut s = String::new();
+            loop {
+                match chars.next() {
+                    Some('"') => {
+                        let j = s.len() + 1; // +1 for the closing '"'
+                        return Ok((s, &input[j + 1..])); // +1 for start of the rest
+                    }
+                    Some(c) => s.push(c),
+                    None => return Err(ParseError::Rest(input)),
+                }
+            }
+        } else {
+            Err(ParseError::Rest(input))
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct Str;
+impl Parser for Str {
+    type Item = String;
+
+    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+        _string()(input)
+    }
+}
+#[cfg(test)]
+mod test_string {
+    use super::*;
+
+    #[test]
+    fn test_string() {
+        assert_eq!(string().parse(""), Err(ParseError::Rest("")));
+        assert_eq!(string().parse("abcdef"), Err(ParseError::Rest("abcdef")));
+        assert_eq!(string().parse("\"abc"), Err(ParseError::Rest("\"abc")));
+        assert_eq!(string().parse("\"abc\"def"), Ok(("abc".to_string(), "def")));
+        assert_eq!(
+            string().parse("\"Hello, world!\" he said."),
+            Ok(("Hello, world!".to_string(), " he said."))
+        );
+        assert_eq!(
+            string().parse("\"\\escaped\\by\\backslash\" and more"),
+            Ok(("\\escaped\\by\\backslash".to_string(), " and more"))
+        );
+        assert_eq!(
+            string().parse("\"あいう\"えお"),
+            Ok(("あいう".to_string(), "えお"))
+        );
+    }
+}
+
 pub fn constant<T>(c: T) -> impl Parser<Item = T>
 where
     T: Clone,
