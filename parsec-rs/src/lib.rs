@@ -894,6 +894,84 @@ mod test_uint64 {
     }
 }
 
+pub fn float32() -> impl Parser<Item = f32> {
+    let sign = pred(|c| c == '-' || c == '+');
+    let integer = digits().map(|chars| {
+        chars
+            .iter()
+            .fold(0, |acc, &c| acc * 10 + c.to_digit(10).unwrap() as i32)
+    });
+    let decimal = digits().map(|chars| {
+        chars.iter().rev().fold(0.0, |acc, &c| {
+            (acc as f32 + c.to_digit(10).unwrap() as f32) / 10.0
+        })
+    });
+
+    sign.opt()
+        .join(integer)
+        .with(char('.'))
+        .join(decimal)
+        .map(|((s, i), d)| {
+            let f = i as f32 + d as f32;
+            if s == Some('-') {
+                -f
+            } else {
+                f
+            }
+        })
+}
+#[cfg(test)]
+mod test_float32 {
+    use super::*;
+
+    #[test]
+    fn test_float32() {
+        assert_eq!(float32().parse("123.456"), Ok((123.456, "")));
+        assert_eq!(float32().parse("-123.456"), Ok((-123.456, "")));
+        assert_eq!(float32().parse("+123.456"), Ok((123.456, "")));
+        assert_eq!(float32().parse("abc"), Err(ParseError::Rest("abc")));
+    }
+}
+
+pub fn float64() -> impl Parser<Item = f64> {
+    let sign = pred(|c| c == '-' || c == '+');
+    let integer = digits().map(|chars| {
+        chars
+            .iter()
+            .fold(0, |acc, &c| acc * 10 + c.to_digit(10).unwrap() as i64)
+    });
+    let decimal = digits().map(|chars| {
+        chars.iter().rev().fold(0.0, |acc, &c| {
+            (acc as f64 + c.to_digit(10).unwrap() as f64) / 10.0
+        })
+    });
+
+    sign.opt()
+        .join(integer)
+        .with(char('.'))
+        .join(decimal)
+        .map(|((s, i), d)| {
+            let f = i as f64 + d as f64;
+            if s == Some('-') {
+                -f
+            } else {
+                f
+            }
+        })
+}
+#[cfg(test)]
+mod test_float64 {
+    use super::*;
+
+    #[test]
+    fn test_float64() {
+        assert_eq!(float32().parse("123.456"), Ok((123.456, "")));
+        assert_eq!(float32().parse("-123.456"), Ok((-123.456, "")));
+        assert_eq!(float32().parse("+123.456"), Ok((123.456, "")));
+        assert_eq!(float32().parse("abc"), Err(ParseError::Rest("abc")));
+    }
+}
+
 pub fn alphanum() -> impl Parser<Item = char> {
     pred(|c: char| c.is_alphanumeric())
 }
