@@ -963,10 +963,10 @@ mod test_spaces {
     }
 }
 
-pub fn string(s: &str) -> impl Parser<Item = &str> {
-    Str(s)
+pub fn keyword(s: &str) -> impl Parser<Item = &str> {
+    Keyword(s)
 }
-fn _string<'a>(s: &'a str) -> impl FnOnce(&str) -> ParseResult<&'a str> {
+fn _keyword<'a>(s: &'a str) -> impl FnOnce(&str) -> ParseResult<&'a str> {
     move |input| {
         if input.starts_with(s) {
             Ok((s, &input[s.len()..]))
@@ -976,23 +976,29 @@ fn _string<'a>(s: &'a str) -> impl FnOnce(&str) -> ParseResult<&'a str> {
     }
 }
 #[derive(Debug, Clone)]
-pub struct Str<'a>(&'a str);
-impl<'a> Parser for Str<'a> {
+pub struct Keyword<'a>(&'a str);
+impl<'a> Parser for Keyword<'a> {
     type Item = &'a str;
 
     fn parse(self, input: &str) -> ParseResult<Self::Item> {
-        _string(self.0)(input)
+        _keyword(self.0)(input)
     }
 }
 #[cfg(test)]
-mod test_string {
+mod test_keyword {
     use super::*;
 
     #[test]
-    fn test_string() {
-        assert_eq!(string("abc").parse("abcdef"), Ok(("abc", "def")));
-        assert_eq!(string("abc").parse("abdef"), Err(ParseError::Rest("abdef")));
-        assert_eq!(string("あいう").parse("あいうえお"), Ok(("あいう", "えお")));
+    fn test_keyword() {
+        assert_eq!(keyword("abc").parse("abcdef"), Ok(("abc", "def")));
+        assert_eq!(
+            keyword("abc").parse("abdef"),
+            Err(ParseError::Rest("abdef"))
+        );
+        assert_eq!(
+            keyword("あいう").parse("あいうえお"),
+            Ok(("あいう", "えお"))
+        );
     }
 }
 
