@@ -416,6 +416,17 @@ mod test_or {
         assert_eq!(char('a').or(char('A')).parse("abc"), Ok(('a', "bc")));
         assert_eq!(char('a').or(char('A')).parse("ABC"), Ok(('A', "BC")));
         assert_eq!(
+            keyword("abc").or(keyword("aBC")).parse("aBCdef"),
+            Ok(("aBC", "def"))
+        );
+        assert_eq!(
+            char('a')
+                .join(char('b'))
+                .or(char('a').join(char('B')))
+                .parse("aBCdef"),
+            Ok((('a', 'B'), "Cdef"))
+        );
+        assert_eq!(
             char('a').or(char('A')).parse("123"),
             Err(ParseError::Rest("123"))
         );
