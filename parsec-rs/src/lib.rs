@@ -919,11 +919,11 @@ pub fn float32() -> impl Parser<Item = f32> {
     });
 
     sign.opt()
-        .join(integer)
+        .join(integer.opt())
         .with(char('.'))
         .join(decimal)
         .map(|((s, i), d)| {
-            let f = i as f32 + d as f32;
+            let f = i.unwrap_or_default() as f32 + d as f32;
             if s == Some('-') {
                 -f
             } else {
@@ -940,6 +940,7 @@ mod test_float32 {
         assert_eq!(float32().parse("123.456"), Ok((123.456, "")));
         assert_eq!(float32().parse("-123.456"), Ok((-123.456, "")));
         assert_eq!(float32().parse("+123.456"), Ok((123.456, "")));
+        assert_eq!(float32().parse(".456"), Ok((0.456, "")));
         assert_eq!(float32().parse("abc"), Err(ParseError::Rest("abc")));
     }
 }
@@ -958,11 +959,11 @@ pub fn float64() -> impl Parser<Item = f64> {
     });
 
     sign.opt()
-        .join(integer)
+        .join(integer.opt())
         .with(char('.'))
         .join(decimal)
         .map(|((s, i), d)| {
-            let f = i as f64 + d as f64;
+            let f = i.unwrap_or_default() as f64 + d as f64;
             if s == Some('-') {
                 -f
             } else {
@@ -979,6 +980,7 @@ mod test_float64 {
         assert_eq!(float32().parse("123.456"), Ok((123.456, "")));
         assert_eq!(float32().parse("-123.456"), Ok((-123.456, "")));
         assert_eq!(float32().parse("+123.456"), Ok((123.456, "")));
+        assert_eq!(float32().parse(".456"), Ok((0.456, "")));
         assert_eq!(float32().parse("abc"), Err(ParseError::Rest("abc")));
     }
 }
