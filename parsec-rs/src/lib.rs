@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ParseError<'a> {
+    #[error("expected: {0}")]
+    Expected(String),
     #[error("rest: {0}")]
     Rest(&'a str),
 }
@@ -1073,7 +1075,7 @@ fn _keyword<'a>(s: &'a str) -> impl FnOnce(&str) -> ParseResult<&'a str> {
         if input.starts_with(s) {
             Ok((s, &input[s.len()..]))
         } else {
-            Err(ParseError::Rest(input))
+            Err(ParseError::Expected(format!(r#"keyword "{}""#, s)))
         }
     }
 }
@@ -1095,7 +1097,7 @@ mod test_keyword {
         assert_eq!(keyword("abc").parse("abcdef"), Ok(("abc", "def")));
         assert_eq!(
             keyword("abc").parse("abdef"),
-            Err(ParseError::Rest("abdef"))
+            Err(ParseError::Expected(r#"keyword "abc""#.to_string()))
         );
         assert_eq!(
             keyword("あいう").parse("あいうえお"),
