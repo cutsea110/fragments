@@ -387,7 +387,7 @@ where
     Q: Parser<Item = P::Item>,
 {
     move |input| match parser1.parse(input) {
-        Ok((rest, x)) => Ok((rest, x)),
+        Ok((x, rest)) => Ok((x, rest)),
         Err(_) => parser2.parse(input),
     }
 }
