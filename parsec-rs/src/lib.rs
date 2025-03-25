@@ -1,18 +1,41 @@
 //! parser combinators
 //!
+use std::fmt;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub enum ParseError<'a> {
-    #[error("rest: {0}")]
-    Rest(&'a str),
+pub struct ParseError {
+    position: usize,
+    expected: Vec<String>,
+    found: Option<String>,
 }
-pub type ParseResult<'a, T> = Result<(T, &'a str), ParseError<'a>>;
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ParseError: position {}, expected: {}, found: {}",
+            self.position,
+            self.expected.join(" or "),
+            self.found.clone().unwrap_or_else(|| "EOS".to_string())
+        )
+    }
+}
+pub type ParseResult<'a, T> = Result<(T, &'a str), ParseError>;
 
 pub trait Parser: Clone {
     type Item;
 
     fn parse(self, input: &str) -> ParseResult<Self::Item>;
+
+    fn label(self, label: String) -> impl Parser<Item = Self::Item>
+    where
+        Self: Sized,
+    {
+        Label {
+            parser: self,
+            label,
+        }
+    }
 
     fn map<F, T>(self, f: F) -> impl Parser<Item = T>
     where
@@ -119,6 +142,34 @@ where
     }
 }
 
+fn _label<P>(parser: P, label: String) -> impl FnOnce(&str) -> ParseResult<P::Item>
+where
+    P: Parser,
+{
+    move |input| match parser.parse(input) {
+        Ok(x) => Ok(x),
+        Err(mut err) => {
+            err.expected.push(label);
+            Err(err)
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct Label<P> {
+    parser: P,
+    label: String,
+}
+impl<P> Parser for Label<P>
+where
+    P: Parser,
+{
+    type Item = P::Item;
+
+    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+        _label(self.parser, self.label)(input)
+    }
+}
+
 fn _map<P, F, T>(parser: P, f: F) -> impl FnOnce(&str) -> ParseResult<T>
 where
     P: Parser,
@@ -154,7 +205,11 @@ mod test_map {
         assert_eq!(int32().map(|x| x * 2).parse("123abc"), Ok((246, "abc")));
         assert_eq!(
             int32().map(|x| x * 2).parse("abc"),
-            Err(ParseError::Rest("abc"))
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
         );
     }
 }
@@ -201,7 +256,10 @@ where
     move |input| match parser1.parse(input) {
         Ok((x, rest)) => match parser2.parse(rest) {
             Ok((y, rest)) => Ok(((x, y), rest)),
-            Err(e) => Err(e),
+            Err(mut e) => {
+                e.position += input.len() - rest.len();
+                Err(e)
+            }
         },
         Err(e) => Err(e),
     }
@@ -234,11 +292,19 @@ mod test_join {
         );
         assert_eq!(
             int32().join(char('a')).parse("abc"),
-            Err(ParseError::Rest("abc"))
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
         );
         assert_eq!(
             int32().join(char('a')).parse("123xyz"),
-            Err(ParseError::Rest("xyz"))
+            Err(ParseError {
+                position: 4,
+                expected: vec!["char 'a'".to_string()],
+                found: Some("x".to_string())
+            })
         );
     }
 }
@@ -249,9 +315,12 @@ where
     Q: Parser,
 {
     move |input| match parser1.parse(input) {
-        Ok((x, rest)) => match parser2.parse(rest) {
-            Ok((_, rest)) => Ok((x, rest)),
-            Err(e) => Err(e),
+        Ok((x, rest1)) => match parser2.parse(rest1) {
+            Ok((_, rest2)) => Ok((x, rest2)),
+            Err(mut e) => {
+                e.position += input.len() - rest1.len();
+                Err(e)
+            }
         },
         Err(e) => Err(e),
     }
@@ -281,7 +350,19 @@ mod test_with {
         assert_eq!(int32().with(char('a')).parse("123abc"), Ok((123, "bc")));
         assert_eq!(
             int32().with(char('a')).parse("abc"),
-            Err(ParseError::Rest("abc"))
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
+        assert_eq!(
+            int32().with(char('a')).parse("123bc"),
+            Err(ParseError {
+                position: 4,
+                expected: vec!["char 'a'".to_string()],
+                found: Some("b".to_string())
+            })
         );
     }
 }
@@ -292,7 +373,13 @@ where
     Q: Parser,
 {
     move |input| match parser1.parse(input) {
-        Ok((_, rest)) => parser2.parse(rest),
+        Ok((_, rest1)) => match parser2.parse(rest1) {
+            Ok((x, rest2)) => Ok((x, rest2)),
+            Err(mut e) => {
+                e.position += input.len() - rest1.len();
+                Err(e)
+            }
+        },
         Err(e) => Err(e),
     }
 }
@@ -321,7 +408,19 @@ mod test_skip {
         assert_eq!(int32().skip(char('a')).parse("123abc"), Ok(('a', "bc")));
         assert_eq!(
             int32().skip(char('a')).parse("abc"),
-            Err(ParseError::Rest("abc"))
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
+        assert_eq!(
+            int32().skip(char('a')).parse("123bc"),
+            Err(ParseError {
+                position: 4,
+                expected: vec!["char 'a'".to_string()],
+                found: Some("b".to_string())
+            })
         );
     }
 }
@@ -333,7 +432,13 @@ where
     F: FnOnce(P::Item) -> Q,
 {
     move |input| match parser.parse(input) {
-        Ok((x, rest)) => f(x).parse(rest),
+        Ok((x, rest1)) => match f(x).parse(rest1) {
+            Ok((y, rest2)) => Ok((y, rest2)),
+            Err(mut e) => {
+                e.position += input.len() - rest1.len();
+                Err(e)
+            }
+        },
         Err(e) => Err(e),
     }
 }
@@ -370,13 +475,21 @@ mod test_and_then {
             int32()
                 .and_then(|x| char('a').map(move |y| (x, y)))
                 .parse("123xyz"),
-            Err(ParseError::Rest("xyz"))
+            Err(ParseError {
+                position: 4,
+                expected: vec!["char 'a'".to_string()],
+                found: Some("x".to_string())
+            })
         );
         assert_eq!(
             int32()
                 .and_then(|x| char('a').map(move |y| (x, y)))
                 .parse("abc"),
-            Err(ParseError::Rest("abc"))
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
         );
     }
 }
@@ -388,7 +501,13 @@ where
 {
     move |input| match parser1.parse(input) {
         Ok((x, rest)) => Ok((x, rest)),
-        Err(_) => parser2.parse(input),
+        Err(mut e1) => match parser2.parse(input) {
+            Ok((x, rest)) => Ok((x, rest)),
+            Err(e2) => {
+                e1.expected.extend(e2.expected);
+                Err(e1)
+            }
+        },
     }
 }
 #[derive(Debug, Clone)]
@@ -428,7 +547,11 @@ mod test_or {
         );
         assert_eq!(
             char('a').or(char('A')).parse("123"),
-            Err(ParseError::Rest("123"))
+            Err(ParseError {
+                position: 1,
+                expected: vec!["char 'a'".to_string(), "char 'A'".to_string()],
+                found: Some("1".to_string())
+            })
         );
     }
 }
@@ -479,7 +602,14 @@ mod test_many1 {
     fn test_many1() {
         assert_eq!(char('a').many1().parse("abc"), Ok((vec!['a'], "bc")));
         assert_eq!(char('a').many1().parse("aabc"), Ok((vec!['a', 'a'], "bc")));
-        assert_eq!(char('a').many1().parse("123"), Err(ParseError::Rest("123")));
+        assert_eq!(
+            char('a').many1().parse("123"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["char 'a'".to_string()],
+                found: Some("1".to_string())
+            })
+        );
     }
 }
 
@@ -557,7 +687,10 @@ where
                     }
                 }
             }
-            Err(e) => Err(e),
+            Err(mut e) => {
+                e.position += input.len() - rest.len();
+                Err(e)
+            }
         }
     }
 }
@@ -589,7 +722,11 @@ mod test_sep_by {
         );
         assert_eq!(
             int32().sep_by(char(',')).parse("abc,def,ghi,"),
-            Err(ParseError::Rest("abc,def,ghi,"))
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
         );
     }
 }
@@ -600,11 +737,21 @@ where
     Q: Parser,
     R: Parser,
 {
-    move |input| {
-        let (_, rest) = open.parse(input)?;
-        let (x, rest) = parser.parse(rest)?;
-        let (_, rest) = close.parse(rest)?;
-        Ok((x, rest))
+    move |input| match open.parse(input) {
+        Err(e1) => return Err(e1),
+        Ok((_, rest1)) => match parser.parse(rest1) {
+            Err(mut e2) => {
+                e2.position += input.len() - rest1.len();
+                return Err(e2);
+            }
+            Ok((x, rest2)) => match close.parse(rest2) {
+                Err(mut e3) => {
+                    e3.position += input.len() - rest2.len();
+                    return Err(e3);
+                }
+                Ok((_, rest3)) => Ok((x, rest3)),
+            },
+        },
     }
 }
 #[derive(Debug, Clone)]
@@ -641,7 +788,11 @@ mod test_bracket {
         );
         assert_eq!(
             int32().bracket(char('<'), char('>')).parse("<123abc"),
-            Err(ParseError::Rest("abc"))
+            Err(ParseError {
+                position: 5,
+                expected: vec!["char '>'".to_string()],
+                found: Some("a".to_string()),
+            })
         );
     }
 }
@@ -658,7 +809,16 @@ where
 {
     move |input| match input.chars().next() {
         Some(c) if f(c) => Ok((c, &input[c.len_utf8()..])),
-        _ => Err(ParseError::Rest(input)),
+        Some(c) => Err(ParseError {
+            position: c.len_utf8(),
+            expected: vec![],
+            found: Some(c.to_string()),
+        }),
+        _ => Err(ParseError {
+            position: 0,
+            expected: vec!["found EOS".to_string()],
+            found: None,
+        }),
     }
 }
 #[derive(Debug, Clone)]
@@ -686,13 +846,25 @@ mod test_pred {
         assert_eq!(pred(|c| c == 'あ').parse("あいう"), Ok(('あ', "いう")));
         assert_eq!(
             pred(|c| c == 'a').parse("123"),
-            Err(ParseError::Rest("123"))
+            Err(ParseError {
+                position: 1,
+                expected: vec![],
+                found: Some("1".to_string())
+            })
+        );
+        assert_eq!(
+            pred(|c| c == 'a').parse(""),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["found EOS".to_string()],
+                found: None,
+            })
         );
     }
 }
 
 pub fn alpha() -> impl Parser<Item = char> {
-    pred(|c: char| c.is_alphabetic())
+    pred(|c: char| c.is_alphabetic()).label("alpha".to_string())
 }
 #[cfg(test)]
 mod test_alpha {
@@ -701,12 +873,27 @@ mod test_alpha {
     #[test]
     fn test_alpha() {
         assert_eq!(alpha().parse("abc"), Ok(('a', "bc")));
-        assert_eq!(alpha().parse("123"), Err(ParseError::Rest("123")));
+        assert_eq!(
+            alpha().parse("123"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["alpha".to_string()],
+                found: Some("1".to_string())
+            })
+        );
+        assert_eq!(
+            alpha().parse(""),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["found EOS".to_string(), "alpha".to_string()],
+                found: None
+            })
+        );
     }
 }
 
 pub fn digit() -> impl Parser<Item = char> {
-    pred(|c: char| c.is_digit(10))
+    pred(|c: char| c.is_digit(10)).label("digit".to_string())
 }
 #[cfg(test)]
 mod test_digit {
@@ -715,7 +902,14 @@ mod test_digit {
     #[test]
     fn test_digit() {
         assert_eq!(digit().parse("123"), Ok(('1', "23")));
-        assert_eq!(digit().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            digit().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -729,7 +923,22 @@ mod test_digits {
     #[test]
     fn test_digits() {
         assert_eq!(digits().parse("123"), Ok((vec!['1', '2', '3'], "")));
-        assert_eq!(digits().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            digits().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
+        assert_eq!(
+            digits().parse(""),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["found EOS".to_string(), "digit".to_string()],
+                found: None,
+            })
+        );
     }
 }
 
@@ -754,7 +963,14 @@ mod test_int8 {
         assert_eq!(int8().parse("123"), Ok((123, "")));
         assert_eq!(int8().parse("-123"), Ok((-123, "")));
         assert_eq!(int8().parse("+123"), Ok((123, "")));
-        assert_eq!(int8().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            int8().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -772,7 +988,14 @@ mod test_uint8 {
     #[test]
     fn test_uint8() {
         assert_eq!(uint8().parse("123"), Ok((123, "")));
-        assert_eq!(uint8().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            uint8().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -797,7 +1020,14 @@ mod test_int16 {
         assert_eq!(int16().parse("123"), Ok((123, "")));
         assert_eq!(int16().parse("-123"), Ok((-123, "")));
         assert_eq!(int16().parse("+123"), Ok((123, "")));
-        assert_eq!(int16().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            int16().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -815,7 +1045,14 @@ mod test_uint16 {
     #[test]
     fn test_uint16() {
         assert_eq!(uint16().parse("123"), Ok((123, "")));
-        assert_eq!(uint16().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            uint16().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -840,7 +1077,14 @@ mod test_int32 {
         assert_eq!(int32().parse("123"), Ok((123, "")));
         assert_eq!(int32().parse("-123"), Ok((-123, "")));
         assert_eq!(int32().parse("+123"), Ok((123, "")));
-        assert_eq!(int32().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            int32().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -858,7 +1102,14 @@ mod test_uint32 {
     #[test]
     fn test_uint32() {
         assert_eq!(uint32().parse("123"), Ok((123, "")));
-        assert_eq!(uint32().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            uint32().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -883,7 +1134,14 @@ mod test_int64 {
         assert_eq!(int64().parse("123"), Ok((123, "")));
         assert_eq!(int64().parse("-123"), Ok((-123, "")));
         assert_eq!(int64().parse("+123"), Ok((123, "")));
-        assert_eq!(int64().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            int64().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -901,7 +1159,14 @@ mod test_uint64 {
     #[test]
     fn test_uint64() {
         assert_eq!(uint64().parse("123"), Ok((123, "")));
-        assert_eq!(uint64().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            uint64().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -941,7 +1206,14 @@ mod test_float32 {
         assert_eq!(float32().parse("-123.456"), Ok((-123.456, "")));
         assert_eq!(float32().parse("+123.456"), Ok((123.456, "")));
         assert_eq!(float32().parse(".456"), Ok((0.456, "")));
-        assert_eq!(float32().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            float32().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["char '.'".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -981,12 +1253,19 @@ mod test_float64 {
         assert_eq!(float32().parse("-123.456"), Ok((-123.456, "")));
         assert_eq!(float32().parse("+123.456"), Ok((123.456, "")));
         assert_eq!(float32().parse(".456"), Ok((0.456, "")));
-        assert_eq!(float32().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            float32().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["char '.'".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
 pub fn alphanum() -> impl Parser<Item = char> {
-    pred(|c: char| c.is_alphanumeric())
+    pred(|c: char| c.is_alphanumeric()).label("alphanum".to_string())
 }
 #[cfg(test)]
 mod test_alphanum {
@@ -996,12 +1275,19 @@ mod test_alphanum {
     fn test_alphanum() {
         assert_eq!(alphanum().parse("abc"), Ok(('a', "bc")));
         assert_eq!(alphanum().parse("123"), Ok(('1', "23")));
-        assert_eq!(alphanum().parse("+-*/"), Err(ParseError::Rest("+-*/")));
+        assert_eq!(
+            alphanum().parse("+-*/"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["alphanum".to_string()],
+                found: Some("+".to_string())
+            })
+        );
     }
 }
 
 pub fn any_char() -> impl Parser<Item = char> {
-    pred(|_| true)
+    pred(|_| true).label("any char".to_string())
 }
 #[cfg(test)]
 mod test_any_char {
@@ -1011,12 +1297,20 @@ mod test_any_char {
     fn test_any_char() {
         assert_eq!(any_char().parse("abc"), Ok(('a', "bc")));
         assert_eq!(any_char().parse("123"), Ok(('1', "23")));
-        assert_eq!(any_char().parse(""), Err(ParseError::Rest("")));
+        assert_eq!(any_char().parse("あいう"), Ok(('あ', "いう")));
+        assert_eq!(
+            any_char().parse(""),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["found EOS".to_string(), "any char".to_string()],
+                found: None,
+            })
+        );
     }
 }
 
 pub fn char(c: char) -> impl Parser<Item = char> {
-    pred(move |x| x == c)
+    pred(move |x| x == c).label(format!("char '{}'", c))
 }
 #[cfg(test)]
 mod test_char {
@@ -1025,12 +1319,28 @@ mod test_char {
     #[test]
     fn test_char() {
         assert_eq!(char('a').parse("abc"), Ok(('a', "bc")));
-        assert_eq!(char('a').parse("bca"), Err(ParseError::Rest("bca")));
+        assert_eq!(char('あ').parse("あいう"), Ok(('あ', "いう")));
+        assert_eq!(
+            char('a').parse("bca"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["char 'a'".to_string()],
+                found: Some("b".to_string())
+            })
+        );
+        assert_eq!(
+            char('a').parse(""),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["found EOS".to_string(), "char 'a'".to_string()],
+                found: None,
+            })
+        );
     }
 }
 
 pub fn space() -> impl Parser<Item = char> {
-    pred(|c: char| c.is_whitespace())
+    pred(|c: char| c.is_whitespace()).label("whitespace".to_string())
 }
 #[cfg(test)]
 mod test_space {
@@ -1041,7 +1351,14 @@ mod test_space {
         assert_eq!(space().parse(" abc"), Ok((' ', "abc")));
         assert_eq!(space().parse("\tabc"), Ok(('\t', "abc")));
         assert_eq!(space().parse("\nabc"), Ok(('\n', "abc")));
-        assert_eq!(space().parse("abc"), Err(ParseError::Rest("abc")));
+        assert_eq!(
+            space().parse("abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["whitespace".to_string()],
+                found: Some("a".to_string())
+            })
+        );
     }
 }
 
@@ -1073,7 +1390,11 @@ fn _keyword<'a>(s: &'a str) -> impl FnOnce(&str) -> ParseResult<&'a str> {
         if input.starts_with(s) {
             Ok((s, &input[s.len()..]))
         } else {
-            Err(ParseError::Rest(input))
+            Err(ParseError {
+                position: 0,
+                expected: vec![s.to_string()],
+                found: Some(input.to_string()),
+            })
         }
     }
 }
@@ -1095,7 +1416,11 @@ mod test_keyword {
         assert_eq!(keyword("abc").parse("abcdef"), Ok(("abc", "def")));
         assert_eq!(
             keyword("abc").parse("abdef"),
-            Err(ParseError::Rest("abdef"))
+            Err(ParseError {
+                position: 0,
+                expected: vec!["abc".to_string()],
+                found: Some("abdef".to_string())
+            })
         );
         assert_eq!(
             keyword("あいう").parse("あいうえお"),
@@ -1120,11 +1445,21 @@ fn _string() -> impl FnOnce(&str) -> ParseResult<String> {
                         return Ok((input[1..len].to_string(), &input[len + 1..]));
                     }
                     Some(c) => len += c.len_utf8(),
-                    None => return Err(ParseError::Rest(input)),
+                    None => {
+                        return Err(ParseError {
+                            position: len + 1,
+                            expected: vec![r#"missing closing '"'"#.to_string()],
+                            found: Some(input[..len + 1].to_string()),
+                        })
+                    }
                 }
             }
         } else {
-            Err(ParseError::Rest(input))
+            Err(ParseError {
+                position: 0,
+                expected: vec!["any string".to_string()],
+                found: Some(input.to_string()),
+            })
         }
     }
 }
@@ -1143,9 +1478,30 @@ mod test_string {
 
     #[test]
     fn test_string() {
-        assert_eq!(string().parse(""), Err(ParseError::Rest("")));
-        assert_eq!(string().parse("abcdef"), Err(ParseError::Rest("abcdef")));
-        assert_eq!(string().parse("\"abc"), Err(ParseError::Rest("\"abc")));
+        assert_eq!(
+            string().parse(""),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["any string".to_string()],
+                found: Some("".to_string()),
+            })
+        );
+        assert_eq!(
+            string().parse("abcdef"),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["any string".to_string()],
+                found: Some("abcdef".to_string()),
+            })
+        );
+        assert_eq!(
+            string().parse("\"abc"),
+            Err(ParseError {
+                position: 4,
+                expected: vec![r#"missing closing '"'"#.to_string()],
+                found: Some("\"abc".to_string()),
+            })
+        );
         assert_eq!(string().parse("\"abc\"def"), Ok(("abc".to_string(), "def")));
         assert_eq!(
             string().parse("\"Hello, world!\" he said."),
