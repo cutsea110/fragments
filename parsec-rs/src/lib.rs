@@ -1515,6 +1515,14 @@ mod test_string {
                 found: Some("\"abc".to_string()),
             })
         );
+        assert_eq!(
+            string().parse("123"),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["any string".to_string()],
+                found: Some("123".to_string()),
+            })
+        );
         assert_eq!(string().parse("\"abc\"def"), Ok(("abc".to_string(), "def")));
         assert_eq!(
             string().parse("\"Hello, world!\" he said."),
