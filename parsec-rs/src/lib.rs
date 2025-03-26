@@ -1,15 +1,17 @@
 //! parser combinators
 //!
-use std::fmt;
+use std::{cmp::Ordering, fmt};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub struct ParseError {
-    // number of characters finished reading at the time the error occurred
+    // number of characters finished reading at the time the error occurred.
+    // this is the most proceedable position among all posibilities.
     position: usize,
-    // expected tokens
+    // expected tokens at the position.
+    // these are all posible tokens that were expected at the position.
     expected: Vec<String>,
-    // subsequent actually found
+    // subsequent actually found at the position.
     found: Option<String>,
 }
 impl fmt::Display for ParseError {
@@ -519,10 +521,14 @@ where
         Ok((x, rest)) => Ok((x, rest)),
         Err(mut e1) => match parser2.parse(input) {
             Ok((x, rest)) => Ok((x, rest)),
-            Err(e2) => {
-                e1.expected.extend(e2.expected);
-                Err(e1)
-            }
+            Err(e2) => match e1.position.cmp(&e2.position) {
+                Ordering::Less => Err(e2),
+                Ordering::Greater => Err(e1),
+                Ordering::Equal => {
+                    e1.expected.extend(e2.expected);
+                    Err(e1)
+                }
+            },
         },
     }
 }
@@ -567,6 +573,41 @@ mod test_or {
                 position: 0,
                 expected: vec!["char 'a'".to_string(), "char 'A'".to_string()],
                 found: Some("1".to_string())
+            })
+        );
+        assert_eq!(
+            char('a')
+                .join(char('b'))
+                .or(char('a').join(char('B')))
+                .parse("aCdef"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["char 'b'".to_string(), "char 'B'".to_string()],
+                found: Some("C".to_string())
+            })
+        );
+        assert_eq!(
+            char('a')
+                .join(char('b'))
+                .join(char('c'))
+                .or(char('a').join(char('B')).join(char('C')))
+                .parse("abdef"),
+            Err(ParseError {
+                position: 2,
+                expected: vec!["char 'c'".to_string()],
+                found: Some("d".to_string())
+            })
+        );
+        assert_eq!(
+            char('a')
+                .join(char('b'))
+                .join(char('c'))
+                .or(char('a').join(char('B')).join(char('C')))
+                .parse("aBdef"),
+            Err(ParseError {
+                position: 2,
+                expected: vec!["char 'C'".to_string()],
+                found: Some("d".to_string())
             })
         );
     }
