@@ -1516,6 +1516,14 @@ mod test_string {
             })
         );
         assert_eq!(
+            string().parse("\""),
+            Err(ParseError {
+                position: 1,
+                expected: vec![r#"missing closing '"'"#.to_string()],
+                found: Some("\"".to_string()),
+            })
+        );
+        assert_eq!(
             string().parse("123"),
             Err(ParseError {
                 position: 0,
@@ -1523,6 +1531,7 @@ mod test_string {
                 found: Some("123".to_string()),
             })
         );
+        assert_eq!(string().parse("\"\"xxx"), Ok(("".to_string(), "xxx")));
         assert_eq!(string().parse("\"abc\"def"), Ok(("abc".to_string(), "def")));
         assert_eq!(
             string().parse("\"Hello, world!\" he said."),
