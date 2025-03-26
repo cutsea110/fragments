@@ -5,8 +5,11 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub struct ParseError {
+    // number of characters finished reading at the time the error occurred
     position: usize,
+    // expected tokens
     expected: Vec<String>,
+    // subsequent actually found
     found: Option<String>,
 }
 impl fmt::Display for ParseError {
@@ -219,7 +222,7 @@ mod test_map {
         assert_eq!(
             int32().map(|x| x * 2).parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -306,7 +309,7 @@ mod test_join {
         assert_eq!(
             int32().join(char('a')).parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -314,7 +317,7 @@ mod test_join {
         assert_eq!(
             int32().join(char('a')).parse("123xyz"),
             Err(ParseError {
-                position: 4,
+                position: 3,
                 expected: vec!["char 'a'".to_string()],
                 found: Some("x".to_string())
             })
@@ -364,7 +367,7 @@ mod test_with {
         assert_eq!(
             int32().with(char('a')).parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -372,7 +375,7 @@ mod test_with {
         assert_eq!(
             int32().with(char('a')).parse("123bc"),
             Err(ParseError {
-                position: 4,
+                position: 3,
                 expected: vec!["char 'a'".to_string()],
                 found: Some("b".to_string())
             })
@@ -422,7 +425,7 @@ mod test_skip {
         assert_eq!(
             int32().skip(char('a')).parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -430,7 +433,7 @@ mod test_skip {
         assert_eq!(
             int32().skip(char('a')).parse("123bc"),
             Err(ParseError {
-                position: 4,
+                position: 3,
                 expected: vec!["char 'a'".to_string()],
                 found: Some("b".to_string())
             })
@@ -489,7 +492,7 @@ mod test_and_then {
                 .and_then(|x| char('a').map(move |y| (x, y)))
                 .parse("123xyz"),
             Err(ParseError {
-                position: 4,
+                position: 3,
                 expected: vec!["char 'a'".to_string()],
                 found: Some("x".to_string())
             })
@@ -499,7 +502,7 @@ mod test_and_then {
                 .and_then(|x| char('a').map(move |y| (x, y)))
                 .parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -561,7 +564,7 @@ mod test_or {
         assert_eq!(
             char('a').or(char('A')).parse("123"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["char 'a'".to_string(), "char 'A'".to_string()],
                 found: Some("1".to_string())
             })
@@ -618,7 +621,7 @@ mod test_many1 {
         assert_eq!(
             char('a').many1().parse("123"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["char 'a'".to_string()],
                 found: Some("1".to_string())
             })
@@ -736,7 +739,7 @@ mod test_sep_by {
         assert_eq!(
             int32().sep_by(char(',')).parse("abc,def,ghi,"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -802,7 +805,7 @@ mod test_bracket {
         assert_eq!(
             int32().bracket(char('<'), char('>')).parse("<123abc"),
             Err(ParseError {
-                position: 5,
+                position: 4,
                 expected: vec!["char '>'".to_string()],
                 found: Some("a".to_string()),
             })
@@ -823,7 +826,7 @@ where
     move |input| match input.chars().next() {
         Some(c) if f(c) => Ok((c, &input[c.len_utf8()..])),
         Some(c) => Err(ParseError {
-            position: c.len_utf8(),
+            position: 0,
             expected: vec![],
             found: Some(c.to_string()),
         }),
@@ -860,7 +863,7 @@ mod test_pred {
         assert_eq!(
             pred(|c| c == 'a').parse("123"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec![],
                 found: Some("1".to_string())
             })
@@ -889,7 +892,7 @@ mod test_alpha {
         assert_eq!(
             alpha().parse("123"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["alpha".to_string()],
                 found: Some("1".to_string())
             })
@@ -918,7 +921,7 @@ mod test_digit {
         assert_eq!(
             digit().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -939,7 +942,7 @@ mod test_digits {
         assert_eq!(
             digits().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -979,7 +982,7 @@ mod test_int8 {
         assert_eq!(
             int8().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1004,7 +1007,7 @@ mod test_uint8 {
         assert_eq!(
             uint8().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1036,7 +1039,7 @@ mod test_int16 {
         assert_eq!(
             int16().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1061,7 +1064,7 @@ mod test_uint16 {
         assert_eq!(
             uint16().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1093,7 +1096,7 @@ mod test_int32 {
         assert_eq!(
             int32().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1118,7 +1121,7 @@ mod test_uint32 {
         assert_eq!(
             uint32().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1150,7 +1153,7 @@ mod test_int64 {
         assert_eq!(
             int64().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1175,7 +1178,7 @@ mod test_uint64 {
         assert_eq!(
             uint64().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
             })
@@ -1222,7 +1225,7 @@ mod test_float32 {
         assert_eq!(
             float32().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["char '.'".to_string()],
                 found: Some("a".to_string())
             })
@@ -1269,7 +1272,7 @@ mod test_float64 {
         assert_eq!(
             float32().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["char '.'".to_string()],
                 found: Some("a".to_string())
             })
@@ -1291,7 +1294,7 @@ mod test_alphanum {
         assert_eq!(
             alphanum().parse("+-*/"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["alphanum".to_string()],
                 found: Some("+".to_string())
             })
@@ -1336,7 +1339,7 @@ mod test_char {
         assert_eq!(
             char('a').parse("bca"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["char 'a'".to_string()],
                 found: Some("b".to_string())
             })
@@ -1367,7 +1370,7 @@ mod test_space {
         assert_eq!(
             space().parse("abc"),
             Err(ParseError {
-                position: 1,
+                position: 0,
                 expected: vec!["whitespace".to_string()],
                 found: Some("a".to_string())
             })
