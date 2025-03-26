@@ -20,6 +20,18 @@ impl fmt::Display for ParseError {
         )
     }
 }
+impl ParseError {
+    pub fn position(&self) -> usize {
+        self.position
+    }
+    pub fn expected(&self) -> &Vec<String> {
+        &self.expected
+    }
+    pub fn found(&self) -> Option<&String> {
+        self.found.as_ref()
+    }
+}
+
 pub type ParseResult<'a, T> = Result<(T, &'a str), ParseError>;
 
 pub trait Parser: Clone {
