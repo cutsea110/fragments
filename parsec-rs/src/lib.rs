@@ -161,6 +161,7 @@ where
     move |input| match parser.parse(input) {
         Ok(x) => Ok(x),
         Err(mut err) => {
+            err.expected.pop();
             err.expected.push(label);
             Err(err)
         }
@@ -897,7 +898,7 @@ mod test_alpha {
             alpha().parse(""),
             Err(ParseError {
                 position: 0,
-                expected: vec!["found EOS".to_string(), "alpha".to_string()],
+                expected: vec!["alpha".to_string()],
                 found: None
             })
         );
@@ -947,7 +948,7 @@ mod test_digits {
             digits().parse(""),
             Err(ParseError {
                 position: 0,
-                expected: vec!["found EOS".to_string(), "digit".to_string()],
+                expected: vec!["digit".to_string()],
                 found: None,
             })
         );
@@ -1314,7 +1315,7 @@ mod test_any_char {
             any_char().parse(""),
             Err(ParseError {
                 position: 0,
-                expected: vec!["found EOS".to_string(), "any char".to_string()],
+                expected: vec!["any char".to_string()],
                 found: None,
             })
         );
@@ -1344,7 +1345,7 @@ mod test_char {
             char('a').parse(""),
             Err(ParseError {
                 position: 0,
-                expected: vec!["found EOS".to_string(), "char 'a'".to_string()],
+                expected: vec!["char 'a'".to_string()],
                 found: None,
             })
         );
