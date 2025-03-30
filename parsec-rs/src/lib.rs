@@ -187,6 +187,26 @@ where
         _label(self.parser, self.label)(input)
     }
 }
+#[cfg(test)]
+mod test_label {
+    use super::*;
+
+    #[test]
+    fn test_label() {
+        assert_eq!(
+            char('a').label("labeled".to_string()).parse("abc"),
+            Ok(('a', "bc"))
+        );
+        assert_eq!(
+            char('a').label("labeled".to_string()).parse("123"),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["labeled".to_string()],
+                found: Some("1".to_string())
+            })
+        );
+    }
+}
 
 fn _map<P, F, T>(parser: P, f: F) -> impl FnOnce(&str) -> ParseResult<T>
 where
