@@ -1506,6 +1506,55 @@ mod test_keyword {
     }
 }
 
+// Case-insensitive keyword parser
+pub fn keyword_ci(s: &str) -> impl Parser<Item = &str> {
+    KeywordCI(s)
+}
+fn _keyword_ci<'a>(s: &'a str) -> impl FnOnce(&str) -> ParseResult<&'a str> {
+    move |input| {
+        if input.to_lowercase().starts_with(&s.to_lowercase()) {
+            Ok((s, &input[s.len()..]))
+        } else {
+            Err(ParseError {
+                position: 0,
+                expected: vec![s.to_string()],
+                found: Some(input.to_string()),
+            })
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct KeywordCI<'a>(&'a str);
+impl<'a> Parser for KeywordCI<'a> {
+    type Item = &'a str;
+
+    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+        _keyword_ci(self.0)(input)
+    }
+}
+#[cfg(test)]
+mod test_keyword_ci {
+    use super::*;
+
+    #[test]
+    fn test_keyword_ci() {
+        assert_eq!(keyword_ci("abc").parse("abcdef"), Ok(("abc", "def")));
+        assert_eq!(keyword_ci("ABC").parse("abcdef"), Ok(("ABC", "def")));
+        assert_eq!(
+            keyword_ci("abc").parse("abdef"),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["abc".to_string()],
+                found: Some("abdef".to_string())
+            })
+        );
+        assert_eq!(
+            keyword_ci("あいう").parse("あいうえお"),
+            Ok(("あいう", "えお"))
+        );
+    }
+}
+
 pub fn string() -> impl Parser<Item = String> {
     Str
 }
