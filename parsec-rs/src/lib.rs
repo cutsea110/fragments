@@ -42,7 +42,7 @@ pub type ParseResult<'a, T> = Result<(T, &'a str), ParseError>;
 pub trait Parser: Clone {
     type Item;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item>;
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item>;
 
     fn label(self, label: String) -> impl Parser<Item = Self::Item>
     where
@@ -154,7 +154,7 @@ where
 {
     type Item = T;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         self(input)
     }
 }
@@ -183,7 +183,7 @@ where
 {
     type Item = P::Item;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _label(self.parser, self.label)(input)
     }
 }
@@ -230,7 +230,7 @@ where
 {
     type Item = T;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _map(self.parser, self.f)(input)
     }
 }
@@ -271,7 +271,7 @@ where
 {
     type Item = Option<P::Item>;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _opt(self.parser)(input)
     }
 }
@@ -314,7 +314,7 @@ where
 {
     type Item = (P::Item, Q::Item);
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _join(self.parser1, self.parser2)(input)
     }
 }
@@ -375,7 +375,7 @@ where
 {
     type Item = P::Item;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _with(self.parser1, self.parser2)(input)
     }
 }
@@ -433,7 +433,7 @@ where
 {
     type Item = Q::Item;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _skip(self.parser1, self.parser2)(input)
     }
 }
@@ -493,7 +493,7 @@ where
 {
     type Item = Q::Item;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _and_then(self.parser, self.f)(input)
     }
 }
@@ -564,7 +564,7 @@ where
 {
     type Item = P::Item;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _or(self.parser1, self.parser2)(input)
     }
 }
@@ -667,7 +667,7 @@ where
 {
     type Item = Vec<P::Item>;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _many1(self.parser)(input)
     }
 }
@@ -719,7 +719,7 @@ where
 {
     type Item = Vec<P::Item>;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _many0(self.parser)(input)
     }
 }
@@ -783,7 +783,7 @@ where
 {
     type Item = Vec<P::Item>;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _sep_by(self.parser, self.sep)(input)
     }
 }
@@ -845,7 +845,7 @@ where
 {
     type Item = Q::Item;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _bracket(self.open, self.parser, self.close)(input)
     }
 }
@@ -908,7 +908,7 @@ where
 {
     type Item = char;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _pred(self.f)(input)
     }
 }
@@ -1480,7 +1480,7 @@ pub struct Keyword<'a>(&'a str);
 impl<'a> Parser for Keyword<'a> {
     type Item = &'a str;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _keyword(self.0)(input)
     }
 }
@@ -1528,7 +1528,7 @@ pub struct KeywordCI<'a>(&'a str);
 impl<'a> Parser for KeywordCI<'a> {
     type Item = &'a str;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _keyword_ci(self.0)(input)
     }
 }
@@ -1594,7 +1594,7 @@ pub struct Str;
 impl Parser for Str {
     type Item = String;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _string()(input)
     }
 }
@@ -1675,7 +1675,7 @@ pub struct Const<T>(T);
 impl<T: Clone> Parser for Const<T> {
     type Item = T;
 
-    fn parse(self, input: &str) -> ParseResult<Self::Item> {
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
         _constant(self.0)(input)
     }
 }
