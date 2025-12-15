@@ -815,16 +815,16 @@ where
     R: Parser,
 {
     move |input| match open.parse(input) {
-        Err(e1) => return Err(e1),
+        Err(e1) => Err(e1),
         Ok((_, rest1)) => match parser.parse(rest1) {
             Err(mut e2) => {
                 e2.position += input.len() - rest1.len();
-                return Err(e2);
+                Err(e2)
             }
             Ok((x, rest2)) => match close.parse(rest2) {
                 Err(mut e3) => {
                     e3.position += input.len() - rest2.len();
-                    return Err(e3);
+                    Err(e3)
                 }
                 Ok((_, rest3)) => Ok((x, rest3)),
             },
@@ -970,7 +970,7 @@ mod test_alpha {
 }
 
 pub fn digit() -> impl Parser<Item = char> {
-    pred(|c: char| c.is_digit(10)).label("digit".to_string())
+    pred(|c: char| c.is_ascii_digit()).label("digit".to_string())
 }
 #[cfg(test)]
 mod test_digit {
@@ -1169,7 +1169,7 @@ pub fn uint32() -> impl Parser<Item = u32> {
     digits().map(|chars| {
         chars
             .iter()
-            .fold(0, |acc, &c| acc * 10 + c.to_digit(10).unwrap() as u32)
+            .fold(0, |acc, &c| acc * 10 + c.to_digit(10).unwrap())
     })
 }
 #[cfg(test)]
@@ -1255,9 +1255,10 @@ pub fn float32() -> impl Parser<Item = f32> {
             .fold(0, |acc, &c| acc * 10 + c.to_digit(10).unwrap() as i32)
     });
     let decimal = digits().map(|chars| {
-        chars.iter().rev().fold(0.0, |acc, &c| {
-            (acc as f32 + c.to_digit(10).unwrap() as f32) / 10.0
-        })
+        chars
+            .iter()
+            .rev()
+            .fold(0.0, |acc, &c| (acc + c.to_digit(10).unwrap() as f32) / 10.0)
     });
 
     sign.opt()
@@ -1265,7 +1266,7 @@ pub fn float32() -> impl Parser<Item = f32> {
         .with(char('.'))
         .join(decimal)
         .map(|((s, i), d)| {
-            let f = i.unwrap_or_default() as f32 + d as f32;
+            let f = i.unwrap_or_default() as f32 + d;
             if s == Some('-') {
                 -f
             } else {
@@ -1302,9 +1303,10 @@ pub fn float64() -> impl Parser<Item = f64> {
             .fold(0, |acc, &c| acc * 10 + c.to_digit(10).unwrap() as i64)
     });
     let decimal = digits().map(|chars| {
-        chars.iter().rev().fold(0.0, |acc, &c| {
-            (acc as f64 + c.to_digit(10).unwrap() as f64) / 10.0
-        })
+        chars
+            .iter()
+            .rev()
+            .fold(0.0, |acc, &c| (acc + c.to_digit(10).unwrap() as f64) / 10.0)
     });
 
     sign.opt()
@@ -1312,7 +1314,7 @@ pub fn float64() -> impl Parser<Item = f64> {
         .with(char('.'))
         .join(decimal)
         .map(|((s, i), d)| {
-            let f = i.unwrap_or_default() as f64 + d as f64;
+            let f = i.unwrap_or_default() as f64 + d;
             if s == Some('-') {
                 -f
             } else {
@@ -1464,8 +1466,8 @@ pub fn keyword(s: &str) -> impl Parser<Item = &str> {
 }
 fn _keyword<'a>(s: &'a str) -> impl FnOnce(&str) -> ParseResult<&'a str> {
     move |input| {
-        if input.starts_with(s) {
-            Ok((s, &input[s.len()..]))
+        if let Some(stripped) = input.strip_prefix(s) {
+            Ok((s, stripped))
         } else {
             Err(ParseError {
                 position: 0,
