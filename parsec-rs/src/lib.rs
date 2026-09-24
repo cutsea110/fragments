@@ -134,6 +134,13 @@ pub trait Parser: Clone {
     {
         Many0 { parser: self }
     }
+    fn many_till<E>(self, end: E) -> impl Parser<Item = Vec<Self::Item>>
+    where
+        Self: Sized + Clone,
+        E: Parser + Clone,
+    {
+        ManyTill { parser: self, end }
+    }
     fn sep_by<Q>(self, sep: Q) -> impl Parser<Item = Vec<Self::Item>>
     where
         Self: Sized + Clone,
@@ -819,6 +826,109 @@ mod test_many0 {
         assert_eq!(char('a').many0().parse("abc"), Ok((vec!['a'], "bc")));
         assert_eq!(char('a').many0().parse("aabc"), Ok((vec!['a', 'a'], "bc")));
         assert_eq!(char('a').many0().parse("123"), Ok((vec![], "123")));
+    }
+}
+
+// repeat parser until end succeeds. the result of end is discarded.
+// unlike many0, if both end and parser fail, the error is reported
+// (the one that proceeded further, or both merged if at the same position).
+fn _many_till<P, E>(parser: P, end: E) -> impl FnOnce(&str) -> ParseResult<Vec<P::Item>>
+where
+    P: Parser + Clone,
+    E: Parser + Clone,
+{
+    move |input| {
+        let mut result = Vec::new();
+        let mut rest = input;
+
+        loop {
+            let consumed = input.len() - rest.len();
+            match end.clone().parse(rest) {
+                Ok((_, r)) => return Ok((result, r)),
+                Err(mut e1) => match parser.clone().parse(rest) {
+                    // parser succeeded without consuming input: stop to avoid infinite loop
+                    Ok((_, r)) if r.len() == rest.len() => {
+                        e1.position += consumed;
+                        return Err(e1);
+                    }
+                    Ok((x, r)) => {
+                        result.push(x);
+                        rest = r;
+                    }
+                    Err(e2) => {
+                        let mut e = match e1.position.cmp(&e2.position) {
+                            Ordering::Less => e2,
+                            Ordering::Greater => e1,
+                            Ordering::Equal => {
+                                e1.expected.extend(e2.expected);
+                                e1
+                            }
+                        };
+                        e.position += consumed;
+                        return Err(e);
+                    }
+                },
+            }
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct ManyTill<P, E> {
+    parser: P,
+    end: E,
+}
+impl<P, E> Parser for ManyTill<P, E>
+where
+    P: Parser + Clone,
+    E: Parser + Clone,
+{
+    type Item = Vec<P::Item>;
+
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
+        _many_till(self.parser, self.end)(input)
+    }
+}
+#[cfg(test)]
+mod test_many_till {
+    use super::*;
+
+    #[test]
+    fn test_many_till() {
+        let p = || int32().with(spaces()).many_till(char(';'));
+
+        assert_eq!(p().parse("1 2 3;abc"), Ok((vec![1, 2, 3], "abc")));
+        assert_eq!(p().parse(";abc"), Ok((vec![], "abc")));
+        // neither end nor parser at the same position: both expected are reported
+        assert_eq!(
+            p().parse("1 2 x;"),
+            Err(ParseError {
+                position: 4,
+                expected: vec!["char ';'".to_string(), "digit".to_string()],
+                found: Some("x".to_string())
+            })
+        );
+        // parser proceeded further than end: parser's error is reported
+        assert_eq!(
+            char('(')
+                .skip(int32())
+                .with(char(')'))
+                .many_till(char(';'))
+                .parse("(1)(2x;"),
+            Err(ParseError {
+                position: 5,
+                expected: vec!["char ')'".to_string()],
+                found: Some("x".to_string())
+            })
+        );
+        // missing end
+        assert_eq!(
+            p().parse("1 2"),
+            Err(ParseError {
+                position: 3,
+                expected: vec!["char ';'".to_string(), "digit".to_string()],
+                found: None
+            })
+        );
     }
 }
 
