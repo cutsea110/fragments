@@ -61,6 +61,13 @@ pub trait Parser: Clone {
     {
         Map { parser: self, f }
     }
+    fn try_map<F, T>(self, f: F) -> impl Parser<Item = T>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Item) -> Result<T, String> + Clone,
+    {
+        TryMap { parser: self, f }
+    }
     fn opt(self) -> impl Parser<Item = Option<Self::Item>>
     where
         Self: Sized,
@@ -247,6 +254,86 @@ mod test_map {
                 position: 0,
                 expected: vec!["digit".to_string()],
                 found: Some("a".to_string())
+            })
+        );
+    }
+}
+
+// if f returns Err, fail at the position where the parser started,
+// with the consumed text as found.
+fn _try_map<P, F, T>(parser: P, f: F) -> impl FnOnce(&str) -> ParseResult<T>
+where
+    P: Parser,
+    F: FnOnce(P::Item) -> Result<T, String>,
+{
+    move |input| match parser.parse(input) {
+        Ok((x, rest)) => match f(x) {
+            Ok(y) => Ok((y, rest)),
+            Err(msg) => Err(ParseError {
+                position: 0,
+                expected: vec![msg],
+                found: Some(input[..input.len() - rest.len()].to_string()),
+            }),
+        },
+        Err(e) => Err(e),
+    }
+}
+#[derive(Debug, Clone)]
+pub struct TryMap<P, F> {
+    parser: P,
+    f: F,
+}
+impl<P, F, T> Parser for TryMap<P, F>
+where
+    P: Parser,
+    F: FnOnce(P::Item) -> Result<T, String> + Clone,
+{
+    type Item = T;
+
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
+        _try_map(self.parser, self.f)(input)
+    }
+}
+#[cfg(test)]
+mod test_try_map {
+    use super::*;
+
+    fn even() -> impl Parser<Item = i32> {
+        int32().try_map(|x| {
+            if x % 2 == 0 {
+                Ok(x)
+            } else {
+                Err("even number".to_string())
+            }
+        })
+    }
+
+    #[test]
+    fn test_try_map() {
+        assert_eq!(even().parse("12abc"), Ok((12, "abc")));
+        assert_eq!(
+            even().parse("13abc"),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["even number".to_string()],
+                found: Some("13".to_string())
+            })
+        );
+        assert_eq!(
+            even().parse("abc"),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["digit".to_string()],
+                found: Some("a".to_string())
+            })
+        );
+        // position is relative to where try_map started
+        assert_eq!(
+            char('x').skip(even()).parse("x13abc"),
+            Err(ParseError {
+                position: 1,
+                expected: vec!["even number".to_string()],
+                found: Some("13".to_string())
             })
         );
     }
