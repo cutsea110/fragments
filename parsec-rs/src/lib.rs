@@ -1750,6 +1750,50 @@ mod test_string {
     }
 }
 
+pub fn eof() -> impl Parser<Item = ()> {
+    Eof
+}
+fn _eof() -> impl FnOnce(&str) -> ParseResult<()> {
+    move |input| {
+        if input.is_empty() {
+            Ok(((), input))
+        } else {
+            Err(ParseError {
+                position: 0,
+                expected: vec!["end of input".to_string()],
+                found: Some(input.to_string()),
+            })
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct Eof;
+impl Parser for Eof {
+    type Item = ();
+
+    fn parse(self, input: &str) -> ParseResult<'_, Self::Item> {
+        _eof()(input)
+    }
+}
+#[cfg(test)]
+mod test_eof {
+    use super::*;
+
+    #[test]
+    fn test_eof() {
+        assert_eq!(eof().parse(""), Ok(((), "")));
+        assert_eq!(
+            eof().parse("abc"),
+            Err(ParseError {
+                position: 0,
+                expected: vec!["end of input".to_string()],
+                found: Some("abc".to_string())
+            })
+        );
+        assert_eq!(char('a').with(eof()).parse("a"), Ok(('a', "")));
+    }
+}
+
 pub fn constant<T>(c: T) -> impl Parser<Item = T>
 where
     T: Clone,
