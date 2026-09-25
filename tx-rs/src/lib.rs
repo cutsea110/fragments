@@ -1,5 +1,13 @@
 //! transaction library
 //!
+pub trait TxRunner {
+    type Ctx;
+
+    fn run_tx<F, T, E>(&self, f: F) -> Result<T, E>
+    where
+        F: FnOnce(&mut Self::Ctx) -> Result<T, E>;
+}
+
 pub trait Tx<Ctx> {
     type Item;
     type Err;
